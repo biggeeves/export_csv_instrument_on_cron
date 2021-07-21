@@ -1,0 +1,34 @@
+{
+  "name": "Cron Export of Data Files",
+  "namespace": "Dcc\\ExportDataFiles",
+  "description": "Indent skip patterns",
+  "documentation": "README.md",
+  "authors": [
+    {
+      "name": "Greg Neils",
+      "email": "gn2003@cumc.columbia.edu",
+      "institution": "Columbia University"
+    }
+  ],
+
+  "enable-every-page-hooks-on-system-pages": false,
+
+  "framework-version": 5,
+
+  "crons": [
+    {
+      "cron_name": "cron1",
+      "cron_description": "Cron that runs every 30 minutes to do X",
+      "method": "cron1",
+      "cron_frequency": "10",
+      "cron_max_run_time": "86400"
+    }
+  ],
+
+  "compatibility": {
+    "php-version-min": "7.2",
+    "php-version-max": "",
+    "redcap-version-min": "11.0",
+    "redcap-version-max": ""
+  }
+}
