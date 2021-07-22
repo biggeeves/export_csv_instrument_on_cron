@@ -35,7 +35,7 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
     /**
      * @var integer turn on or off debug output.  0=Off, 1=On
      */
-    private $debugMode = 1;
+    private $debugMode = 0;
 
 
     /**
@@ -132,7 +132,7 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $message = 'Why does getProjectsWithModuleEnabled not work in this context?';
         $this->debugMessage($message);
 
-        //        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
+//        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
 //            $_GET['pid'] = $localProjectId;
 //
 //            file_put_contents('REDCap Cron Example with PID.txt', 'It did it');
@@ -170,7 +170,6 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         return "The \"{$cronInfo['cron_description']}\" cron job completed successfully.";
     }
 
-
     /**
      * @param $dir  string The folder location to clear the contents of.
      * @param $ending  string The file ending.  Examples: "txt" or "csv".
@@ -202,7 +201,6 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
      */
     function documentCron(string $message)
     {
-        if ($this->debugMode != 1) return;
         file_put_contents($this->cronDocumentation,
             date('H:i:s', time()) . ': ' . $message . PHP_EOL,
             FILE_APPEND);
