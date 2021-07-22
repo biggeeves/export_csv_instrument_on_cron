@@ -1,7 +1,7 @@
 {
   "name": "Cron Export of Data Files",
   "namespace": "Dcc\\ExportDataFiles",
-  "description": "Indent skip patterns",
+  "description": "Create CSV files of every instrument for every active project.",
   "documentation": "README.md",
   "authors": [
     {
