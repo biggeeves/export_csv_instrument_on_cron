@@ -5,6 +5,10 @@ namespace Dcc\ExportDataFiles;
 use Exception;
 use REDCap as REDCap;
 
+/**
+ * Class ExportDataFiles
+ * @package Dcc\ExportDataFiles
+ */
 class ExportDataFiles extends \ExternalModules\AbstractExternalModule
 {
 
@@ -26,7 +30,7 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
     /**
      * @var string Temporary file for debug
      */
-    private $tempFile;
+    private $debugFile;
 
     /**
      * @var integer turn on or off debug output.  0=Off, 1=On
@@ -40,6 +44,9 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
     private $tempFileDir;
 
 
+    /**
+     * ExportDataFiles constructor.
+     */
     public function __construct()
     {
         parent::__construct();
@@ -49,7 +56,7 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $this->cronDocumentation = $this->outputDir . 'Cron documentation ' . $this->FileTimeStamp . '.txt';
 
         $this->tempFileDir = $this->outputDir . 'Temp' . DS;
-        $this->tempFile = $this->tempFileDir . DS . 'Cron Temp File ' . $this->FileTimeStamp . '.txt';
+        $this->debugFile = $this->tempFileDir . 'Cron Temp File ' . $this->FileTimeStamp . '.txt';
 
         if (!file_exists($this->tempFileDir)) {
             $message = 'Made New directory ' . $this->tempFileDir;
@@ -66,17 +73,19 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $message = 'Documentation File: ' . $this->cronDocumentation;
         $this->documentCron($message);
 
-        $message = 'Debug File: ' . $this->tempFile;
-        $this->documentCron($message);
+        $message = 'Debug File: ' . $this->debugFile;
+        $this->debugMessage($message);
     }
 
     /**
      * @param array $cronInfo The cron's configuration block from config.json.
      */
 
-    function cron1(array $cronInfo): string
+    function cron1(array $cronInfo)
     {
-        // return;
+        $message = 'Cron1 Started';
+        $this->documentCron($message);
+
         $PId = 30;
         // $originalPid = $_GET['pid'];
 
@@ -107,12 +116,10 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         }
 
 
-
-//        $projects = $this->getProjectsWithModuleEnabled();
         $projects = [['a', 'b'], ['c', 'd']];  /// fake data because
         $message = 'Debug to Temp: Writing Projects with Module Enabled';
         $this->documentCron($message);
-        $temp = fopen($this->tempFile, 'w');
+        $temp = fopen($this->debugFile, 'w');
         foreach ($projects as $fields) {
             fputcsv($temp, $fields);
         }
@@ -120,32 +127,31 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
 
         $message = 'Before Framework';
         $this->documentCron($message);
+        $this->debugMessage($message);
 
-        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
-            $_GET['pid'] = $localProjectId;
+        $message = 'Why does getProjectsWithModuleEnabled not work in this context?';
+        $this->debugMessage($message);
 
-            file_put_contents('REDCap Cron Example with PID.txt', 'It did it');
-        }
+        //        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
+//            $_GET['pid'] = $localProjectId;
+//
+//            file_put_contents('REDCap Cron Example with PID.txt', 'It did it');
+//        }
 
-        $message = 'After Framework';
+        $message = 'After Framework. Writing Projects with Module Enabled: Completed.';
         $this->documentCron($message);
-
-        $message = 'Writing Projects with Module Enabled: Completed.';
-        $this->documentCron($message);
-
+        $this->debugMessage($message);
 
         $message = 'Writing CSV data to file';
         $this->documentCron($message);
 
         $fp = fopen($fileNameArray, 'w');
-
         foreach ($data as $fields) {
             fputcsv($fp, $fields);
         }
-
         fclose($fp);
 
-        $message = 'Completed Writing data ';
+        $message = 'Writing CSV data to file: Completed';
         $this->documentCron($message);
 
 
@@ -155,9 +161,8 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $this->deleteOldCSVFiles($this->outputDir, $ending);
 
 
-        $message = 'Cron Completed';
+        $message = 'Cron1 Completed';
         $this->documentCron($message);
-
 
         // Put the pid back the way it was before this cron job (likely doesn't matter, but is good housekeeping practice)
         // $_GET['pid'] = $originalPid;
@@ -165,7 +170,12 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         return "The \"{$cronInfo['cron_description']}\" cron job completed successfully.";
     }
 
-    function deleteOldCSVFiles($dir, $ending)
+
+    /**
+     * @param $dir  string The folder location to clear the contents of.
+     * @param $ending  string The file ending.  Examples: "txt" or "csv".
+     */
+    function deleteOldCSVFiles(string $dir, $ending)
     {
 
         // Get a list of all CSV files in your folder.
@@ -186,11 +196,26 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $this->documentCron($message);
     }
 
-    function documentCron($message)
+    /**
+     * @param $message string
+     * Message to write to the log file
+     */
+    function documentCron(string $message)
     {
-        // Document that the cron started
         if ($this->debugMode != 1) return;
         file_put_contents($this->cronDocumentation,
+            date('H:i:s', time()) . ': ' . $message . PHP_EOL,
+            FILE_APPEND);
+    }
+
+    /**
+     * @param $message string
+     * debug message is written to the debug error log file.
+     */
+    function debugMessage(string $message)
+    {
+        if ($this->debugMode != 1) return;
+        file_put_contents($this->debugFile,
             date('H:i:s', time()) . ': ' . $message . PHP_EOL,
             FILE_APPEND);
     }
