@@ -30,18 +30,22 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
     /**
      * @var string Temporary file for debug
      */
-    private $debugFile;
+    private $debugCronFile;
 
     /**
      * @var integer turn on or off debug output.  0=Off, 1=On
      */
-    private $debugMode = 0;
+    private $debugMode = 1;
 
 
     /**
-     * @var string Directory for temporary files.  IE: Not automatically purged directory.
+     * @var string Directory for temporary debug files.  IE: Not automatically purged directory.
      */
-    private $tempFileDir;
+    private $debugFileDir;
+    /**
+     * @var string Debug file that will be overwritten each time.
+     */
+    private $debugStaticFile;
 
 
     /**
@@ -55,13 +59,14 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
 
         $this->cronDocumentation = $this->outputDir . 'Cron documentation ' . $this->FileTimeStamp . '.txt';
 
-        $this->tempFileDir = $this->outputDir . 'Temp' . DS;
-        $this->debugFile = $this->tempFileDir . 'Cron Temp File ' . $this->FileTimeStamp . '.txt';
+        $this->debugFileDir = $this->outputDir . 'Debug' . DS;
+        $this->debugCronFile = $this->debugFileDir . 'Debug Cron File ' . $this->FileTimeStamp . '.txt';
+        $this->debugStaticFile = $this->debugFileDir . 'Debug Static File.txt';
 
-        if (!file_exists($this->tempFileDir)) {
-            $message = 'Made New directory ' . $this->tempFileDir;
+        if (!file_exists($this->debugFileDir)) {
+            $message = 'Made New directory ' . $this->debugFileDir;
             $this->documentCron($message);
-            mkdir($this->tempFileDir, 0755, true);
+            mkdir($this->debugFileDir, 0755, true);
         }
 
         $message = 'Cron started';
@@ -73,100 +78,110 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
         $message = 'Documentation File: ' . $this->cronDocumentation;
         $this->documentCron($message);
 
-        $message = 'Debug File: ' . $this->debugFile;
-        $this->debugMessage($message);
+        $message = 'Debug Cron File: ' . $this->debugCronFile;
+        $this->debugCronMessage($message);
+
+        $message = 'Debug Static File:' . $this->debugStaticFile;
+        $this->debugStaticMessage($message);
+
     }
 
     /**
      * @param array $cronInfo The cron's configuration block from config.json.
      */
 
-    function cron1(array $cronInfo)
+    function cron2(array $cronInfo): string
     {
-        $message = 'Cron1 Started';
+        $message = 'Cron2 Started';
         $this->documentCron($message);
+    }
+
+    /**
+     * @param array $cronInfo The cron's configuration block from config.json.
+     */
+
+    function cron1(array $cronInfo): string
+    {
+
+        $this->documentCron('Cron1 Started');
 
         $PId = 30;
-        // $originalPid = $_GET['pid'];
+        $project = $this->getProject($PId);
+        $projectTitle = $project->getTitle();
+        $projectFolderName = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", '', $projectTitle);
 
-        $projectPath = $this->outputDir . $PId . DS;
+        // $originalPid = $_GET['pid'];
+        $projectPrint = print_r($project, true);
+//        $this->debugStaticMessage($projectPrint);
+
+        $this->debugStaticMessage("project title:" . $projectTitle);
+
+        $projectPath = $this->outputDir . $projectFolderName . DS;
 
         $fileEnding = 'csv';
         $this->deleteOldCSVFiles($projectPath, $fileEnding);
 
 
         if (!file_exists($projectPath)) {
-            $message = 'Made New directory ' . $projectPath;
-            $this->documentCron($message);
+            $this->documentCron('Made New directory ' . $projectPath);
             mkdir($projectPath, 0755, true);
         }
 
-        $fileNameArray = $projectPath . $this->FileTimeStamp . ' .csv';
-        $data = REDCap::getData($PId, 'csv');
+        $projectStatus = REDCap::getProjectStatus($PId);
+        $this->debugStaticMessage('Project status: ' . $projectStatus);
 
-        $message = 'Got Project Data';
-        $this->documentCron($message);
+        $projectSettings = $this->getProjectSettings($PId);
+        $message = print_r($projectSettings, true);
+        $this->debugStaticMessage($message);
 
-        if (empty($data)) {
-            $data = [['empty', 'from get data'], ['c', 'd']];
-        } else if (!$data) {
-            $data = [['Not', 'false'], ['c', 'd']];
-        } else if (is_null($data)) {
-            $data = [['is', 'Null'], ['c', 'd']];
-        }
+        $this->documentCron('Writing CSV data to Multi file');
 
+        $projectCSVMultipleFile = $projectPath . 'all.csv';
+        $allData = REDCap::getData($PId, 'csv');
+        file_put_contents($projectCSVMultipleFile, $allData);
 
-        $projects = [['a', 'b'], ['c', 'd']];  /// fake data because
-        $message = 'Debug to Temp: Writing Projects with Module Enabled';
-        $this->documentCron($message);
-        $temp = fopen($this->debugFile, 'w');
-        foreach ($projects as $fields) {
-            fputcsv($temp, $fields);
-        }
-        fclose($temp);
+        $this->documentCron('Writing CSV data to file: Completed');
 
-        $message = 'Before Framework';
-        $this->documentCron($message);
-        $this->debugMessage($message);
-
-        $message = 'Why does getProjectsWithModuleEnabled not work in this context?';
-        $this->debugMessage($message);
-
-//        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
-//            $_GET['pid'] = $localProjectId;
+        $projectDictionary = REDCap::getDataDictionary($PId, 'array');
+//        $dictionaryPrint = print_r($projectDictionary, true);
+//        file_put_contents($this->debugStaticFile, $dictionaryPrint);
 //
-//            file_put_contents('REDCap Cron Example with PID.txt', 'It did it');
-//        }
-
-        $message = 'After Framework. Writing Projects with Module Enabled: Completed.';
-        $this->documentCron($message);
-        $this->debugMessage($message);
-
-        $message = 'Writing CSV data to file';
-        $this->documentCron($message);
-
-        $fp = fopen($fileNameArray, 'w');
-        foreach ($data as $fields) {
-            fputcsv($fp, $fields);
+        $formVariables = [];
+        foreach ($projectDictionary as $variable) {
+            $formVariables[$variable['form_name']][] = $variable['field_name'];
         }
-        fclose($fp);
 
-        $message = 'Writing CSV data to file: Completed';
-        $this->documentCron($message);
+        $this->documentCron('Writing each instrument CSV data to file');
+        foreach ($formVariables as $formName => $variables) {
+            $data = REDCap::getData($PId, 'csv', null, $variables);
+            $projectInstrumentPath = $projectPath . $formName . '.csv';
+            file_put_contents($projectInstrumentPath, $data);
+        }
+        $this->documentCron('Writing each instrument CSV data to file: Completed');
 
 
-        $message = 'Delete all previous output files.  Keep the most current.';
-        $this->documentCron($message);
+        $this->debugStaticMessage('Project ID:' . $PId);
+
+        $frameworkVersion = \ExternalModules\ExternalModules::getFrameworkVersion($this);
+        $this->debugStaticMessage('Framework version: ' . $frameworkVersion);
+
+        $availableMethods = print_r(get_class_methods($this), true);
+        $this->debugCronMessage($availableMethods);
+
+        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
+            $_GET['pid'] = $localProjectId;
+            $this->debugStaticMessage('ProjectsWithModuleEnabled: ' . $localProjectId);
+        }
+
+        $this->documentCron('Delete all previous cron output logs.  Keep the most current.');
         $ending = 'txt';
         $this->deleteOldCSVFiles($this->outputDir, $ending);
 
-
-        $message = 'Cron1 Completed';
-        $this->documentCron($message);
-
-        // Put the pid back the way it was before this cron job (likely doesn't matter, but is good housekeeping practice)
-        // $_GET['pid'] = $originalPid;
-
+        $this->documentCron('Cron1 Completed');
+//
+//        // Put the pid back the way it was before this cron job (likely doesn't matter, but is good housekeeping practice)
+//        // $_GET['pid'] = $originalPid;
+//
         return "The \"{$cronInfo['cron_description']}\" cron job completed successfully.";
     }
 
@@ -174,7 +189,7 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
      * @param $dir  string The folder location to clear the contents of.
      * @param $ending  string The file ending.  Examples: "txt" or "csv".
      */
-    function deleteOldCSVFiles(string $dir, $ending)
+    function deleteOldCSVFiles(string $dir, string $ending)
     {
 
         // Get a list of all CSV files in your folder.
@@ -210,10 +225,22 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
      * @param $message string
      * debug message is written to the debug error log file.
      */
-    function debugMessage(string $message)
+    function debugCronMessage(string $message)
     {
         if ($this->debugMode != 1) return;
-        file_put_contents($this->debugFile,
+        file_put_contents($this->debugCronFile,
+            date('H:i:s', time()) . ': ' . $message . PHP_EOL,
+            FILE_APPEND);
+    }
+
+    /**
+     * @param $message string
+     * debug message is written to the debug error log file.
+     */
+    function debugStaticMessage(string $message)
+    {
+        if ($this->debugMode != 1) return;
+        file_put_contents($this->debugStaticFile,
             date('H:i:s', time()) . ': ' . $message . PHP_EOL,
             FILE_APPEND);
     }
