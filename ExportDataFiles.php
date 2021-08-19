@@ -2,14 +2,17 @@
 
 namespace Dcc\ExportDataFiles;
 
+use DateTime;
 use Exception;
+use ExternalModules\AbstractExternalModule;
+use Project;
 use REDCap as REDCap;
 
 /**
  * Class ExportDataFiles
  * @package Dcc\ExportDataFiles
  */
-class ExportDataFiles extends \ExternalModules\AbstractExternalModule
+class ExportDataFiles extends AbstractExternalModule
 {
 
     /**
@@ -18,230 +21,271 @@ class ExportDataFiles extends \ExternalModules\AbstractExternalModule
     private $outputDir;
 
     /**
-     * @var string
-     */
-    private $FileTimeStamp;
-
-    /**
      * @var string Documentation about what happened during the cron job.
      */
     private $cronDocumentation;
 
-    /**
-     * @var string Temporary file for debug
-     */
-    private $debugCronFile;
-
-    /**
-     * @var integer turn on or off debug output.  0=Off, 1=On
-     */
-    private $debugMode = 1;
-
-
-    /**
-     * @var string Directory for temporary debug files.  IE: Not automatically purged directory.
-     */
-    private $debugFileDir;
-    /**
-     * @var string Debug file that will be overwritten each time.
-     */
-    private $debugStaticFile;
+    private $startTimeStamp;
+    private $logExport;
+    private $systemEnabled;
+    private $logOverwrite;
+    private $originalPID;
+    private $includePHI;
 
 
     /**
      * ExportDataFiles constructor.
+     * @throws Exception
      */
     public function __construct()
     {
         parent::__construct();
-        $this->FileTimeStamp = date('m_d_Y_H_i_s', time());
-        $this->outputDir = 'c:' . DS . 'www' . DS . 'data' . DS;
 
-        $this->cronDocumentation = $this->outputDir . 'Cron documentation ' . $this->FileTimeStamp . '.txt';
+        $this->startTimeStamp = new DateTime();
 
-        $this->debugFileDir = $this->outputDir . 'Debug' . DS;
-        $this->debugCronFile = $this->debugFileDir . 'Debug Cron File ' . $this->FileTimeStamp . '.txt';
-        $this->debugStaticFile = $this->debugFileDir . 'Debug Static File.txt';
+        // get user supplied specifications
+        $this->systemEnabled = $this->getSystemSetting('system-enabled');
+        $this->outputDir = $this->getSystemSetting('root-dir');
+        $this->logExport = $this->getSystemSetting('log-export');
+        $this->logOverwrite = $this->getSystemSetting('log-overwrite');
+        $this->includePHI = $this->getSystemSetting('include-phi');
 
-        if (!file_exists($this->debugFileDir)) {
-            $message = 'Made New directory ' . $this->debugFileDir;
-            $this->documentCron($message);
-            mkdir($this->debugFileDir, 0755, true);
-        }
+        // Location of the log file.
+        $this->cronDocumentation = $this->outputDir . DS . 'Cron documentation.log';
 
-        $message = 'Cron started';
-        $this->documentCron($message);
-
-        $message = 'Base Directory: ' . $this->outputDir;
-        $this->documentCron($message);
-
-        $message = 'Documentation File: ' . $this->cronDocumentation;
-        $this->documentCron($message);
-
-        $message = 'Debug Cron File: ' . $this->debugCronFile;
-        $this->debugCronMessage($message);
-
-        $message = 'Debug Static File:' . $this->debugStaticFile;
-        $this->debugStaticMessage($message);
+        // keep track of the original pid value even if it was not set.
+        $this->originalPID = $_GET['pid'] ?? null;
 
     }
 
     /**
-     * @param array $cronInfo The cron's configuration block from config.json.
+     * @param array $cronInfo The crons configuration block from config.json.
+     * @throws Exception
      */
 
-    function cron2(array $cronInfo): string
-    {
-        $message = 'Cron2 Started';
-        $this->documentCron($message);
-    }
-
-    /**
-     * @param array $cronInfo The cron's configuration block from config.json.
-     */
-
-    function cron1(array $cronInfo): string
+    function exportData(array $cronInfo): string
     {
 
-        $this->documentCron('Cron1 Started');
-
-        $PId = 30;
-        $project = $this->getProject($PId);
-        $projectTitle = $project->getTitle();
-        $projectFolderName = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", '', $projectTitle);
-
-        // $originalPid = $_GET['pid'];
-        $projectPrint = print_r($project, true);
-//        $this->debugStaticMessage($projectPrint);
-
-        $this->debugStaticMessage("project title:" . $projectTitle);
-
-        $projectPath = $this->outputDir . $projectFolderName . DS;
-
-        $fileEnding = 'csv';
-        $this->deleteOldCSVFiles($projectPath, $fileEnding);
-
-
-        if (!file_exists($projectPath)) {
-            $this->documentCron('Made New directory ' . $projectPath);
-            mkdir($projectPath, 0755, true);
+        if (!is_dir($this->outputDir)) {
+            REDCap::logEvent("Export Data Files E.M. could not access the output directory.");
+            return 'The export directory is not available.';
         }
 
-        $projectStatus = REDCap::getProjectStatus($PId);
-        $this->debugStaticMessage('Project status: ' . $projectStatus);
-
-        $projectSettings = $this->getProjectSettings($PId);
-        $message = print_r($projectSettings, true);
-        $this->debugStaticMessage($message);
-
-        $this->documentCron('Writing CSV data to Multi file');
-
-        $projectCSVMultipleFile = $projectPath . 'all.csv';
-        $allData = REDCap::getData($PId, 'csv');
-        file_put_contents($projectCSVMultipleFile, $allData);
-
-        $this->documentCron('Writing CSV data to file: Completed');
-
-        $projectDictionary = REDCap::getDataDictionary($PId, 'array');
-//        $dictionaryPrint = print_r($projectDictionary, true);
-//        file_put_contents($this->debugStaticFile, $dictionaryPrint);
-//
-        $formVariables = [];
-        foreach ($projectDictionary as $variable) {
-            $formVariables[$variable['form_name']][] = $variable['field_name'];
+        if (!$this->systemEnabled) {
+            return 'Disabled.';
         }
 
-        $this->documentCron('Writing each instrument CSV data to file');
-        foreach ($formVariables as $formName => $variables) {
-            $data = REDCap::getData($PId, 'csv', null, $variables);
-            $projectInstrumentPath = $projectPath . $formName . '.csv';
-            file_put_contents($projectInstrumentPath, $data);
-        }
-        $this->documentCron('Writing each instrument CSV data to file: Completed');
-
-
-        $this->debugStaticMessage('Project ID:' . $PId);
-
-        $frameworkVersion = \ExternalModules\ExternalModules::getFrameworkVersion($this);
-        $this->debugStaticMessage('Framework version: ' . $frameworkVersion);
-
-        $availableMethods = print_r(get_class_methods($this), true);
-        $this->debugCronMessage($availableMethods);
-
-        foreach ($this->getProjectsWithModuleEnabled() as $localProjectId) {
-            $_GET['pid'] = $localProjectId;
-            $this->debugStaticMessage('ProjectsWithModuleEnabled: ' . $localProjectId);
+        if ($this->logOverwrite) {
+            file_put_contents($this->cronDocumentation,
+                $this->startTimeStamp->format('Y-m-d H:i:s') . ': Log Overwritten' . PHP_EOL);
         }
 
-        $this->documentCron('Delete all previous cron output logs.  Keep the most current.');
-        $ending = 'txt';
-        $this->deleteOldCSVFiles($this->outputDir, $ending);
+        $this->setSystemSetting('system-last-run', $this->startTimeStamp->format('Y-m-d H:i:s'));
 
-        $this->documentCron('Cron1 Completed');
-//
-//        // Put the pid back the way it was before this cron job (likely doesn't matter, but is good housekeeping practice)
-//        // $_GET['pid'] = $originalPid;
-//
+        $this->log('Export Data Cron started ' . $this->startTimeStamp->format('Y-m-d H:i:s'));
+        REDCap::logEvent("Exported csv data started using E.M.");
+        $this->log('Logged start time in REDCap activity log.');
+        $this->log('Base Directory: ' . $this->outputDir);
+        $this->log('Documentation File: ' . $this->cronDocumentation);
+        $this->log('Include PHI: ' . ($this->includePHI ? "Yes" : "No"));
+
+
+        try {
+            $projectIds = $this->getActiveProjectIds();
+            $this->log('Project IDs generated.');
+        } catch (Exception $e) {
+            $this->log('Project IDs could not be generated.');
+            return 'No project IDs.';
+        }
+        if (!$projectIds) {
+            $this->log('There are no production projects to export.');
+        }
+
+        foreach ($projectIds as $pid) {
+            // add check to see if the EM is enabled for the project
+            $enabled = $this->getProjectSetting('project-enabled', $pid);
+            if ($enabled) {
+                $this->exportDataFiles($pid);
+            } else {
+                $this->log('PID ' . $pid . ' EM is not enabled in project EM settings');
+            }
+        }
+
+        $endTimeStamp = new DateTime('now');
+        $runTime = $endTimeStamp->diff($this->startTimeStamp);
+        $readableRunTime = $runTime->format('%H Hours %I Minutes %S Seconds');
+
+        $this->log('Completed in ' . $readableRunTime . PHP_EOL . PHP_EOL);
+
+        $_GET['pid'] = $this->originalPID;
+
         return "The \"{$cronInfo['cron_description']}\" cron job completed successfully.";
+
     }
 
+
     /**
-     * @param $dir  string The folder location to clear the contents of.
-     * @param $ending  string The file ending.  Examples: "txt" or "csv".
+     * Get active projects where that are not automatically included as a redcap demo project.
+     * @return array an array of project IDs.  An empty array if no projects are found.
      */
-    function deleteOldCSVFiles(string $dir, string $ending)
+    private function getActiveProjectIds(): array
     {
+        $query = "SELECT `project_id` FROM `redcap_projects`" .
+            " WHERE (`status` = 1 OR `status` = 2)" .
+            " AND (`project_name` not like '%redcap_demo_%')" .
+            " AND ISNULL (`completed_time`)";
+        $params = [];
+        $projectIds = [];
 
-        // Get a list of all CSV files in your folder.
-        $files = glob($dir . "*." . $ending);
+        try {
+            $result = $this->query($query, $params);
+        } catch (Exception $e) {
+            $this->log('Caught exception' . $e->getMessage());
+            return $projectIds;
+        }
 
-        // Sort them by modification date.
-        usort($files, function ($a, $b) {
-            return filemtime($a) - filemtime($b);
-        });
+        if ($result->num_rows === 0) {
+            $this->log('No projects with a status=1');
+            return $projectIds;
+        }
 
-        // Remove the newest from your list.
-        array_pop($files);
-
-        // Delete all the rest.
-        array_map('unlink', $files);
-
-        $message = 'Deleted files at ' . $dir . ' ending in ' . $ending;
-        $this->documentCron($message);
+        while ($row = $result->fetch_assoc()) {
+            $projectIds[] = $row['project_id'];
+        }
+        return $projectIds;
     }
 
     /**
      * @param $message string
      * Message to write to the log file
      */
-    function documentCron(string $message)
+    private function log(string $message)
     {
+        if (!$this->logExport) return;
         file_put_contents($this->cronDocumentation,
             date('H:i:s', time()) . ': ' . $message . PHP_EOL,
             FILE_APPEND);
     }
 
     /**
-     * @param $message string
-     * debug message is written to the debug error log file.
+     * @param $pid
+     * @throws Exception
      */
-    function debugCronMessage(string $message)
+    private function exportDataFiles($pid)
     {
-        if ($this->debugMode != 1) return;
-        file_put_contents($this->debugCronFile,
-            date('H:i:s', time()) . ': ' . $message . PHP_EOL,
-            FILE_APPEND);
+        $proj = new Project($pid);
+
+        REDCap::logEvent("Exported data for  project ID " . $pid . ' using E.M.',
+            "",
+            "",
+            null,
+            null,
+            $pid);
+
+        // Get basic project info.
+        $project = $this->getProject($pid);
+        $projectTitle = $project->getTitle();
+        $eventForms = $proj->eventsForms;
+
+        $this->log($pid . ': ' . $projectTitle . ' started.');
+
+        // create a safe directory name.
+        $projectFolderName = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", '', $projectTitle);
+        $projectPath = $this->outputDir . DS . $projectFolderName . DS;
+        $this->makeProjectDirectory($projectPath);
+
+        // stop if the directory was not created.
+        if (!file_exists($projectPath)) {
+            return;
+        }
+
+        // Name of the Single Export file.
+        $projectCSVMultipleFile = $projectPath . 'all.csv';
+
+        // Get Data
+        $projectAllData = REDCap::getData($pid, 'csv');
+
+        // Get the variables for each instrument.
+        $formVariables = $this->createFormVariables($pid);
+
+        // create list of the events for each form
+        $formEvents = [];
+        foreach ($eventForms as $eventId => $formNames) {
+            foreach ($formNames as $formName) {
+                $formEvents[$formName][] = $eventId;
+            }
+        }
+
+        // look up the exact events that each instrument is in and ONLY get these events.
+
+        // create the single export file.
+        file_put_contents($projectCSVMultipleFile, $projectAllData);
+        $this->log('    Exported all file.');
+
+        // create a single csv file for each instrument.
+        foreach ($formVariables as $formName => $variables) {
+            // if the instrument is not assigned an event do not include the event in the export.
+            if (empty($formEvents[$formName])) {
+                continue;
+            }
+            $data = REDCap::getData($pid, 'csv', null, $variables, $formEvents[$formName]);
+            $projectInstrumentPath = $projectPath . $formName . '.csv';
+            file_put_contents($projectInstrumentPath, $data);
+        }
+
+        // we are done!  Celebrate with a very calm note in the log file.
+        $this->log('    Exported instrument CSV files.' . PHP_EOL);
+
     }
 
     /**
-     * @param $message string
-     * debug message is written to the debug error log file.
+     * @throws Exception
      */
-    function debugStaticMessage(string $message)
+    private function createFormVariables($pid): array
     {
-        if ($this->debugMode != 1) return;
-        file_put_contents($this->debugStaticFile,
-            date('H:i:s', time()) . ': ' . $message . PHP_EOL,
-            FILE_APPEND);
+
+        $proj = new Project($pid);
+        $isLongitudinal = $proj->longitudinal;
+        $projectDictionary = REDCap::getDataDictionary($pid, 'array');
+
+        $formVariables = [];
+
+        $recordIdName = array_key_first($projectDictionary);
+
+        foreach ($projectDictionary as $properties) {
+            // include PHI only if marked yes on the system setting.
+            if ($this->includePHI || (!$properties['identifier'] == 'y')) {
+                $formVariables[$properties['form_name']][] = $properties['field_name'];
+            }
+        }
+
+        foreach ($formVariables as $formName => $variables) {
+
+            array_push($variables, $formName . '_completed');
+            array_unshift($variables, 'redcap_repeat_instance', 'redcap_repeat_instrument');
+
+            if ($isLongitudinal) {
+                array_unshift($variables, 'redcap_event_name');
+            }
+
+            // add record_id name to all forms
+            array_unshift($variables, $recordIdName);
+
+            //  remove duplicate record ID for the first instrument from the array.
+            $formVariables[$formName] = array_unique($variables);
+        }
+
+        return $formVariables;
+    }
+
+    private function makeProjectDirectory($projectPath): void
+    {
+        if (!file_exists($projectPath)) {
+            $this->log('Created new directory ' . $projectPath);
+            mkdir($projectPath, 0744, true);
+            if (!file_exists($projectPath)) {
+                $this->log('Unable to make new directory ' . $projectPath);
+            }
+        }
     }
 }
