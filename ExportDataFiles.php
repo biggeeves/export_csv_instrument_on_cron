@@ -48,7 +48,13 @@ class ExportDataFiles extends AbstractExternalModule
     /**
      * @var
      */
-    private $includePHI;
+    private $systemIncludePHI;
+
+    private $useProjectName;
+    /**
+     * @var int
+     */
+    private $logMaxLines;
 
 
     /**
@@ -66,13 +72,20 @@ class ExportDataFiles extends AbstractExternalModule
         $this->outputDir = $this->getSystemSetting('root-dir');
         $this->logExport = $this->getSystemSetting('log-export');
         $this->logOverwrite = $this->getSystemSetting('log-overwrite');
-        $this->includePHI = $this->getSystemSetting('include-phi');
+        $this->logMaxLines = (int)$this->getSystemSetting('log-lines');
+        $this->systemIncludePHI = $this->getSystemSetting('system-include-phi');
+        $this->useProjectName = $this->getSystemSetting('use-project-name');
 
         // Location of the log file.
         $this->cronDocumentation = $this->outputDir . DS . 'Cron documentation.log';
 
         // keep track of the original pid value even if it was not set.
         $this->originalPID = $_GET['pid'] ?? null;
+        if ($this->logExport) {
+            $this->displayCronLogLines();
+        } else {
+            $this->setSystemSetting('system-first-lines-log', '');
+        }
 
     }
 
@@ -105,7 +118,8 @@ class ExportDataFiles extends AbstractExternalModule
         $this->log('Logged start time in REDCap activity log.');
         $this->log('Base Directory: ' . $this->outputDir);
         $this->log('Documentation File: ' . $this->cronDocumentation);
-        $this->log('Include PHI: ' . ($this->includePHI ? "Yes" : "No"));
+        $this->log('Include PHI: ' . ($this->systemIncludePHI ? "Yes" : "No"));
+        $this->log('Use project name for folder name: ' . ($this->useProjectName ? "Yes" : "No"));
 
 
         try {
@@ -113,10 +127,12 @@ class ExportDataFiles extends AbstractExternalModule
             $this->log('Project IDs generated.');
         } catch (Exception $e) {
             $this->log('Project IDs could not be generated.');
+            REDCap::logEvent("Export Data Files E.M. Project IDs could not be generated.");
             return 'No project IDs.';
         }
         if (!$projectIds) {
             $this->log('There are no production projects to export.');
+            REDCap::logEvent("Export Data Files E.M. There are no production projects to export.");
         }
 
         foreach ($projectIds as $pid) {
@@ -208,27 +224,56 @@ class ExportDataFiles extends AbstractExternalModule
         $project = $this->getProject($pid);
         $projectTitle = $project->getTitle();
         $eventForms = $proj->eventsForms;
+        $projectDictionaryCsv = REDCap::getDataDictionary($pid, 'csv');
+
 
         $this->log($pid . ': ' . $projectTitle . ' started.');
 
         // create a safe directory name.
-        $projectFolderName = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", '', $projectTitle);
+        // The default name is the project ID. It never changes.
+        // The user can specify if the project name should be used as the folder name instead.
+        if ($this->useProjectName) {
+            $projectFolderName = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", '', $projectTitle);
+        } else {
+            $projectFolderName = (string)$pid;
+        }
+
         $projectPath = $this->outputDir . DS . $projectFolderName . DS;
         $this->makeProjectDirectory($projectPath);
 
         // stop if the directory was not created.
         if (!file_exists($projectPath)) {
+            REDCap::logEvent("Export Data Files E.M. Project specific path is unavailable.");
             return;
         }
+
+        $projectStartTimeStamp = new DateTime();
+        $projectReadMeFileName = $projectPath . '_readme_' . $projectTitle . '.txt';
+
+        // create the dictionary
+        $projectDictionaryFileName = $projectPath . 'dictionary.csv';
+        $projectDictionaryCsv = REDCap::getDataDictionary($pid, 'csv');
+        file_put_contents($projectDictionaryFileName, $projectDictionaryCsv);
 
         // Name of the Single Export file.
         $projectCSVMultipleFile = $projectPath . 'all.csv';
 
-        // Get Data
-        $projectAllData = REDCap::getData($pid, 'csv');
 
         // Get the variables for each instrument.
         $formVariables = $this->createFormVariables($pid);
+
+
+        // todo rename var.  Why is this called sanitized?
+        $sanitizedDictionary = [];
+        foreach ($formVariables as $form => $variables) {
+            foreach ($variables as $variable) {
+                $sanitizedDictionary[] = $variable;
+            }
+        }
+
+        // Get Data
+        $projectAllData = REDCap::getData($pid, 'csv', null, $sanitizedDictionary);
+
 
         // create list of the events for each form
         $formEvents = [];
@@ -258,6 +303,16 @@ class ExportDataFiles extends AbstractExternalModule
         // we are done!  Celebrate with a very calm note in the log file.
         $this->log('    Exported instrument CSV files.' . PHP_EOL);
 
+        $projectEndTimeStamp = new DateTime();
+
+        $projectMessage = $pid . ': ' . $projectTitle . ' exported via em.' . PHP_EOL .
+            'Started at: ' . $projectStartTimeStamp->format('Y-m-d H:i:s') . PHP_EOL .
+            'Completed at: ' . $projectEndTimeStamp->format('Y-m-d H:i:s') . PHP_EOL .
+            'Include PHI: ' . ($this->systemIncludePHI ? "Yes" : "No");
+
+        file_put_contents($projectReadMeFileName, $projectMessage);
+
+
     }
 
     /**
@@ -269,16 +324,19 @@ class ExportDataFiles extends AbstractExternalModule
 
         $proj = new Project($pid);
         $isLongitudinal = $proj->longitudinal;
-        $projectDictionary = REDCap::getDataDictionary($pid, 'array');
+        $projectDictionaryArray = REDCap::getDataDictionary($pid, 'array');
 
         $formVariables = [];
 
-        $recordIdName = array_key_first($projectDictionary);
+        $recordIdName = array_key_first($projectDictionaryArray);
 
-        foreach ($projectDictionary as $properties) {
+        foreach ($projectDictionaryArray as $properties) {
             // include PHI only if marked yes on the system setting.
-            if ($this->includePHI || (!$properties['identifier'] == 'y')) {
-                $formVariables[$properties['form_name']][] = $properties['field_name'];
+            if ($this->systemIncludePHI || (!$properties['identifier'] == 'y')) {
+                // include project PHI only if the project checked yes to include PHI.
+                if ($this->getProjectSetting('project-include-phi', $pid)) {
+                    $formVariables[$properties['form_name']][] = $properties['field_name'];
+                }
             }
         }
 
@@ -311,6 +369,40 @@ class ExportDataFiles extends AbstractExternalModule
             $this->log('Created new directory ' . $projectPath);
             if (!mkdir($projectPath, 0744, true) && !is_dir($projectPath)) {
                 $this->log('Unable to make new directory ' . $projectPath);
+            }
+        }
+    }
+
+    private function getSampleLinesFromFile($maxLines): array
+    {
+        $handle = fopen($this->cronDocumentation, "r");
+        if (!$handle) {
+            return false;
+
+        }
+        $lines = [];
+        for ($i = 0; $i <= $maxLines; $i++) {
+            $line = fgets($handle);
+            if ($line !== false) {
+                $lines[] = $line;
+            }
+        }
+        fclose($handle);
+
+        return $lines;
+    }
+
+    private function displayCronLogLines()
+    {
+        if (!$this->logMaxLines) {
+            $this->logMaxLines = 1000;
+        } elseif ($this->logMaxLines > 1000) {
+            $this->logMaxLines;
+        }
+        if ($this->logMaxLines > 0) {
+            $lines = implode(PHP_EOL, $this->getSampleLinesFromFile($this->logMaxLines));
+            if ($lines) {
+                $this->setSystemSetting('system-first-lines-log', $lines);
             }
         }
     }

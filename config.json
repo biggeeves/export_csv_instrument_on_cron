@@ -15,14 +15,14 @@
   "crons": [
     {
       "cron_name": "export_data",
-      "cron_description": "Runs at 2 am to create csv data dump of each instrument.",
+      "cron_description": "Runs at 2am to create a csv data dump of each instrument in a project(s).",
       "method": "exportData",
       "cron_hour": 2,
       "cron_minute": 0
     }
   ],
   "compatibility": {
-    "php-version-min": "7.2",
+    "php-version-min": "7.3",
     "php-version-max": "",
     "redcap-version-min": "10.0",
     "redcap-version-max": ""
@@ -42,14 +42,28 @@
     },
     {
       "key": "root-dir",
-      "name": "Directory for all output.",
+      "name": "Output directory.  No trailing / or \\. Example: C:\\www\\data ",
       "required": true,
       "type": "text",
       "repeatable": false
     },
     {
+      "key": "use-project-name",
+      "name": "By default the project number is used for the file folder. Check this to create folders based on the project name.  Project numbers are permanent. Project names can change affecting the output folder name.",
+      "required": true,
+      "type": "checkbox",
+      "repeatable": false
+    },
+    {
+      "key": "system-include-phi",
+      "name": "Include PHI",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    },
+    {
       "key": "log-export",
-      "name": "Log details to a log file in the output directory",
+      "name": "Log details to a file in the output directory",
       "required": false,
       "type": "checkbox",
       "repeatable": false
@@ -62,11 +76,17 @@
       "repeatable": false
     },
     {
-      "key": "system-include-phi",
-      "name": "Include PHI",
+      "key": "log-lines",
+      "name": "Number of lines to display from the log. Max = 1000 lines.  Default=1000 lines.  If more lines are needed, request the file from the server admin.",
       "required": false,
-      "type": "checkbox",
-      "repeatable": false
+      "type": "text",
+      "repeatable": false,
+      "validation": "integer"
+    },
+    {
+      "key": "system-first-lines-log",
+      "name": "First lines from the log file",
+      "type": "textarea"
     }
   ],
   "project-settings": [
