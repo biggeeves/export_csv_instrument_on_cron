@@ -1,0 +1,89 @@
+{
+  "name": "Cron Export of Data Files",
+  "namespace": "Dcc\\ExportDataFiles",
+  "description": "Create CSV files of every instrument for every active project.",
+  "documentation": "README.md",
+  "authors": [
+    {
+      "name": "Greg Neils",
+      "email": "gn2003@cumc.columbia.edu",
+      "institution": "Columbia University"
+    }
+  ],
+  "enable-every-page-hooks-on-system-pages": false,
+  "framework-version": 6,
+  "crons": [
+    {
+      "cron_name": "export_data",
+      "cron_description": "Runs at 2 am to create csv data dump of each instrument.",
+      "method": "exportData",
+      "cron_hour": 2,
+      "cron_minute": 0
+    }
+  ],
+  "compatibility": {
+    "php-version-min": "7.2",
+    "php-version-max": "",
+    "redcap-version-min": "10.0",
+    "redcap-version-max": ""
+  },
+  "system-settings": [
+    {
+      "key": "system-enabled",
+      "name": "Enabled",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    },
+    {
+      "key": "system-last-run",
+      "name": "Last Run Time (This will be over written with the last time the program ran.)",
+      "type": "text"
+    },
+    {
+      "key": "root-dir",
+      "name": "Directory for all output.",
+      "required": true,
+      "type": "text",
+      "repeatable": false
+    },
+    {
+      "key": "log-export",
+      "name": "Log details to a log file in the output directory",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    },
+    {
+      "key": "log-overwrite",
+      "name": "Overwrite the previous log file",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    },
+    {
+      "key": "system-include-phi",
+      "name": "Include PHI",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    }
+  ],
+  "project-settings": [
+    {
+      "key": "project-enabled",
+      "name": "Enabled",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false,
+      "super-users-only": true
+    },
+    {
+      "key": "project-include-phi",
+      "name": "Include PHI",
+      "required": false,
+      "type": "checkbox",
+      "repeatable": false
+    }
+  ]
+}
