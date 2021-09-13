@@ -224,8 +224,6 @@ class ExportDataFiles extends AbstractExternalModule
         $project = $this->getProject($pid);
         $projectTitle = $project->getTitle();
         $eventForms = $proj->eventsForms;
-        $projectDictionaryCsv = REDCap::getDataDictionary($pid, 'csv');
-
 
         $this->log($pid . ': ' . $projectTitle . ' started.');
 
@@ -263,16 +261,15 @@ class ExportDataFiles extends AbstractExternalModule
         $formVariables = $this->createFormVariables($pid);
 
 
-        // todo rename var.  Why is this called sanitized?
-        $sanitizedDictionary = [];
+        $formattedDictionary = [];
         foreach ($formVariables as $form => $variables) {
             foreach ($variables as $variable) {
-                $sanitizedDictionary[] = $variable;
+                $formattedDictionary[] = $variable;
             }
         }
 
         // Get Data
-        $projectAllData = REDCap::getData($pid, 'csv', null, $sanitizedDictionary);
+        $projectAllData = REDCap::getData($pid, 'csv', null, $formattedDictionary);
 
 
         // create list of the events for each form
@@ -373,11 +370,14 @@ class ExportDataFiles extends AbstractExternalModule
         }
     }
 
+    /**
+     * @throws Exception
+     */
     private function getSampleLinesFromFile($maxLines): array
     {
-        $handle = fopen($this->cronDocumentation, "r");
+        $handle = fopen($this->cronDocumentation, 'r');
         if (!$handle) {
-            return false;
+            throw new Exception();
 
         }
         $lines = [];
@@ -392,7 +392,10 @@ class ExportDataFiles extends AbstractExternalModule
         return $lines;
     }
 
-    private function displayCronLogLines()
+    /**
+     * @throws Exception
+     */
+    private function displayCronLogLines(): void
     {
         if (!$this->logMaxLines) {
             $this->logMaxLines = 1000;
