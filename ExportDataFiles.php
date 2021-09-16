@@ -174,7 +174,7 @@ class ExportDataFiles extends AbstractExternalModule
         try {
             $result = $this->query($query, $params);
         } catch (Exception $e) {
-            $this->log('Caught exception' . $e->getMessage());
+            $this->log('Caught exception in getActiveProjectIds' . $e->getMessage());
             return $projectIds;
         }
 
@@ -377,8 +377,7 @@ class ExportDataFiles extends AbstractExternalModule
     {
         $handle = fopen($this->cronDocumentation, 'r');
         if (!$handle) {
-            throw new Exception();
-
+            return ['Unable access log file'];
         }
         $lines = [];
         for ($i = 0; $i <= $maxLines; $i++) {
