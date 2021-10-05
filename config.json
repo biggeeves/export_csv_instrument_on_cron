@@ -12,13 +12,22 @@
   ],
   "enable-every-page-hooks-on-system-pages": false,
   "framework-version": 6,
-  "crons": [
+  "cron_testing_config": [
     {
       "cron_name": "export_data",
       "cron_description": "Runs at 2am to create a csv data dump of each instrument in a project(s).",
       "method": "exportData",
       "cron_hour": 2,
       "cron_minute": 0
+    }
+  ],
+  "crons": [
+    {
+      "cron_name": "export_data",
+      "cron_description": "Runs at 2am to create a csv data dump of each instrument in a project(s).",
+      "method": "exportData",
+      "cron_frequency": 2,
+      "cron_max_run_time": 300
     }
   ],
   "compatibility": {
