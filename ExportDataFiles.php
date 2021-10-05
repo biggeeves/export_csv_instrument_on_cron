@@ -113,25 +113,25 @@ class ExportDataFiles extends AbstractExternalModule
 
         $this->setSystemSetting('system-last-run', $this->startTimeStamp->format('Y-m-d H:i:s'));
 
-        $this->log('Export Data Cron started ' . $this->startTimeStamp->format('Y-m-d H:i:s'));
+        $this->emLog('Export Data Cron started ' . $this->startTimeStamp->format('Y-m-d H:i:s'));
         REDCap::logEvent("Exported csv data started using E.M.");
-        $this->log('Logged start time in REDCap activity log.');
-        $this->log('Base Directory: ' . $this->outputDir);
-        $this->log('Documentation File: ' . $this->cronDocumentation);
-        $this->log('Include PHI: ' . ($this->systemIncludePHI ? "Yes" : "No"));
-        $this->log('Use project name for folder name: ' . ($this->useProjectName ? "Yes" : "No"));
+        $this->emLog('Logged start time in REDCap activity log.');
+        $this->emLog('Base Directory: ' . $this->outputDir);
+        $this->emLog('Documentation File: ' . $this->cronDocumentation);
+        $this->emLog('Include PHI: ' . ($this->systemIncludePHI ? "Yes" : "No"));
+        $this->emLog('Use project name for folder name: ' . ($this->useProjectName ? "Yes" : "No"));
 
 
         try {
             $projectIds = $this->getActiveProjectIds();
-            $this->log('Project IDs generated.');
+            $this->emLog('Project IDs generated.');
         } catch (Exception $e) {
-            $this->log('Project IDs could not be generated.');
+            $this->emLog('Project IDs could not be generated.');
             REDCap::logEvent("Export Data Files E.M. Project IDs could not be generated.");
             return 'No project IDs.';
         }
         if (!$projectIds) {
-            $this->log('There are no production projects to export.');
+            $this->emLog('There are no production projects to export.');
             REDCap::logEvent("Export Data Files E.M. There are no production projects to export.");
         }
 
@@ -141,7 +141,7 @@ class ExportDataFiles extends AbstractExternalModule
             if ($enabled) {
                 $this->exportDataFiles($pid);
             } else {
-                $this->log('PID ' . $pid . ' EM is not enabled in project EM settings');
+                $this->emLog('PID ' . $pid . ' EM is not enabled in project EM settings');
             }
         }
 
@@ -149,7 +149,7 @@ class ExportDataFiles extends AbstractExternalModule
         $runTime = $endTimeStamp->diff($this->startTimeStamp);
         $readableRunTime = $runTime->format('%H Hours %I Minutes %S Seconds');
 
-        $this->log('Completed in ' . $readableRunTime . PHP_EOL . PHP_EOL);
+        $this->emLog('Completed in ' . $readableRunTime . PHP_EOL . PHP_EOL);
 
         $_GET['pid'] = $this->originalPID;
 
@@ -174,12 +174,12 @@ class ExportDataFiles extends AbstractExternalModule
         try {
             $result = $this->query($query, $params);
         } catch (Exception $e) {
-            $this->log('Caught exception in getActiveProjectIds' . $e->getMessage());
+            $this->emLog('Caught exception in getActiveProjectIds' . $e->getMessage());
             return $projectIds;
         }
 
         if ($result->num_rows === 0) {
-            $this->log('No projects with a status=1');
+            $this->emLog('No projects with a status=1');
             return $projectIds;
         }
 
@@ -193,7 +193,7 @@ class ExportDataFiles extends AbstractExternalModule
      * @param $message string
      * write a message to the log file.
      */
-    private function log(string $message): void
+    public function emLog(string $message): void
     {
         if (!$this->logExport) {
             return;
@@ -225,7 +225,7 @@ class ExportDataFiles extends AbstractExternalModule
         $projectTitle = $project->getTitle();
         $eventForms = $proj->eventsForms;
 
-        $this->log($pid . ': ' . $projectTitle . ' started.');
+        $this->emLog($pid . ': ' . $projectTitle . ' started.');
 
         // create a safe directory name.
         // The default name is the project ID. It never changes.
@@ -284,7 +284,7 @@ class ExportDataFiles extends AbstractExternalModule
 
         // create the single export file.
         file_put_contents($projectCSVMultipleFile, $projectAllData);
-        $this->log('    Exported all file.');
+        $this->emLog('    Exported all file.');
 
         // create a single csv file for each instrument.
         foreach ($formVariables as $formName => $variables) {
@@ -294,11 +294,12 @@ class ExportDataFiles extends AbstractExternalModule
             }
             $data = REDCap::getData($pid, 'csv', null, $variables, $formEvents[$formName]);
             $projectInstrumentPath = $projectPath . $formName . '.csv';
+            $this->emLog('    Exported ' . $formName . PHP_EOL);
             file_put_contents($projectInstrumentPath, $data);
         }
 
         // we are done!  Celebrate with a very calm note in the log file.
-        $this->log('    Exported instrument CSV files.' . PHP_EOL);
+        $this->emLog('    Exported instrument CSV files.' . PHP_EOL);
 
         $projectEndTimeStamp = new DateTime();
 
@@ -363,9 +364,9 @@ class ExportDataFiles extends AbstractExternalModule
     private function makeProjectDirectory($projectPath): void
     {
         if (!file_exists($projectPath)) {
-            $this->log('Created new directory ' . $projectPath);
+            $this->emLog('Created new directory ' . $projectPath);
             if (!mkdir($projectPath, 0744, true) && !is_dir($projectPath)) {
-                $this->log('Unable to make new directory ' . $projectPath);
+                $this->emLog('Unable to make new directory ' . $projectPath);
             }
         }
     }
